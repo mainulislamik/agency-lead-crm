@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  lead_crm_db:
+    image: postgres:16-alpine
+    container_name: lead_crm_db
+    environment:
+      POSTGRES_DB: lead_crm
+      POSTGRES_USER: crm_admin
+      POSTGRES_PASSWORD: crm_secure_pass_2026
+    volumes:
+      - lead_crm_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5435:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm_admin -d lead_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: lead_crm_backend
+    ports:
+      - "8088:8088"
+    environment:
+      - DATABASE_URL=postgresql://crm_admin:crm_secure_pass_2026@lead_crm_db:5432/lead_crm
+    depends_on:
+      lead_crm_db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lead_crm_frontend
+    ports:
+      - "3055:80"
+    environment:
+      - VITE_API_URL=http://localhost:8088/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  lead_crm_postgres_data:
