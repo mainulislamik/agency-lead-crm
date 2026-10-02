@@ -17,8 +17,9 @@ class Company(Base):
     phone = Column(String(50), nullable=True)
     rating = Column(Float, nullable=True)
     reviews_count = Column(Integer, default=0)
+    lead_score = Column(Integer, default=50)  # Calculated 0-100 quality score
     google_maps_url = Column(String(1000), nullable=True)
-    lead_source = Column(String(100), default="Google Maps")
+    lead_source = Column(String(100), default="Google Maps & Web Engine")
     lead_status = Column(String(50), default="New", index=True)  # New, Verified, Contacted, Sample Sent, Converted, Lost
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

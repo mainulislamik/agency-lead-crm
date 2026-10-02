@@ -4,8 +4,10 @@ import {
   Building2, Users, PhoneCall, CheckCircle2, AlertCircle,
   Search, Filter, Plus, Phone, Mail, Globe, MapPin,
   ExternalLink, MessageSquare, Download, Trash2, RefreshCw,
-  Sparkles, ShieldCheck, ChevronRight, X, Clock, Play
+  Sparkles, ShieldCheck, ChevronRight, X, Clock, Play,
+  Send, Award
 } from 'lucide-react';
+import OutreachAssistant from './components/OutreachAssistant';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8088/api';
 
@@ -208,6 +210,25 @@ export default function App() {
     }
   };
 
+  const [batchVerifying, setBatchVerifying] = useState(false);
+  const handleBatchVerify = async () => {
+    setBatchVerifying(true);
+    try {
+      const res = await axios.post(`${API_BASE}/leads/batch-verify`);
+      setBanner({
+        text: `Batch DNS verification completed: Checked ${res.data.total_checked}, Verified ${res.data.verified} active emails!`,
+        type: 'success'
+      });
+      fetchStats();
+      fetchCompanies();
+      setTimeout(() => setBanner(null), 4000);
+    } catch (err) {
+      alert("Batch verification failed: " + err.message);
+    } finally {
+      setBatchVerifying(false);
+    }
+  };
+
   const handleCleanupDemo = async () => {
     if (!window.confirm("Are you sure you want to clean up ALL demo and test leads? This resets the CRM database to clean production state.")) {
       return;
@@ -315,6 +336,17 @@ export default function App() {
               >
                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
                 <span>Email Verifier</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('outreach')}
+                className={`px-3.5 py-2 rounded-md text-sm font-semibold transition-colors flex items-center space-x-2 ${
+                  activeTab === 'outreach'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Send className="w-4 h-4 text-sky-400" />
+                <span>Outreach & Scripts</span>
               </button>
             </div>
 
@@ -549,6 +581,14 @@ export default function App() {
               </div>
 
               <div className="flex items-center space-x-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+                <button
+                  onClick={handleBatchVerify}
+                  disabled={batchVerifying}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold whitespace-nowrap flex items-center space-x-1.5 transition-colors shadow-sm disabled:opacity-50 mr-2"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>{batchVerifying ? 'Verifying...' : 'Verify All (DNS MX)'}</span>
+                </button>
                 {['All', 'New', 'Verified', 'Contacted', 'Sample Sent', 'Converted', 'Lost'].map((st) => (
                   <button
                     key={st}
@@ -601,8 +641,14 @@ export default function App() {
                         return (
                           <tr key={comp.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="py-3.5 px-4">
-                              <div className="font-bold text-slate-900 flex items-center space-x-1.5">
+                              <div className="font-bold text-slate-900 flex items-center space-x-2">
                                 <span>{comp.name}</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                  (comp.lead_score || 50) >= 80 ? 'bg-emerald-100 text-emerald-800' :
+                                  (comp.lead_score || 50) >= 60 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                                }`}>
+                                  {comp.lead_score || 50}% Quality
+                                </span>
                                 {comp.website && (
                                   <a
                                     href={comp.website.startsWith('http') ? comp.website : `https://${comp.website}`}
@@ -843,6 +889,15 @@ export default function App() {
               )}
             </form>
           </div>
+        )}
+
+        {/* TAB 5: COLD OUTREACH & TELEMARKETING ASSISTANT */}
+        {activeTab === 'outreach' && (
+          <OutreachAssistant
+            companies={companies}
+            apiBase={API_BASE}
+            setBanner={setBanner}
+          />
         )}
       </main>
 

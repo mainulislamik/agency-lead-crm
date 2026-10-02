@@ -53,6 +53,7 @@ class CompanyBase(BaseModel):
     phone: Optional[str] = None
     rating: Optional[float] = None
     reviews_count: Optional[int] = 0
+    lead_score: Optional[int] = 50
     google_maps_url: Optional[str] = None
     lead_source: Optional[str] = "Google Maps"
     lead_status: Optional[str] = "New"
