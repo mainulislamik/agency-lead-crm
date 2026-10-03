@@ -18,6 +18,8 @@ class Company(Base):
     rating = Column(Float, nullable=True)
     reviews_count = Column(Integer, default=0)
     lead_score = Column(Integer, default=50)  # Calculated 0-100 quality score
+    tech_stack = Column(String(500), nullable=True) # e.g. Shopify, Adobe CC, Capture One
+    tags = Column(String(255), nullable=True) # e.g. High-Priority, E-Commerce, Commercial Studio
     google_maps_url = Column(String(1000), nullable=True)
     lead_source = Column(String(100), default="Google Maps & Web Engine")
     lead_status = Column(String(50), default="New", index=True)  # New, Verified, Contacted, Sample Sent, Converted, Lost
@@ -55,9 +57,20 @@ class CallLog(Base):
     contact_id = Column(Integer, ForeignKey("contacts.id", ondelete="SET NULL"), nullable=True)
     caller_name = Column(String(100), default="Sales Agent")
     call_status = Column(String(100), nullable=False)  # Interested, Sample Requested, Follow Up, Not Interested, No Answer, Wrong Number
+    call_duration = Column(Integer, default=0) # duration in seconds
     notes = Column(Text, nullable=True)
     next_followup_date = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     company = relationship("Company", back_populates="call_logs")
     contact = relationship("Contact", back_populates="call_logs")
+
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(100), nullable=False) # LEAD_SCRAPED, DNS_VERIFIED, STAGE_CHANGED, CALL_LOGGED, CSV_IMPORTED
+    description = Column(String(500), nullable=False)
+    entity_type = Column(String(50), default="Company")
+    entity_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

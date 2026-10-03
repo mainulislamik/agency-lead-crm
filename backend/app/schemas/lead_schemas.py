@@ -1,10 +1,10 @@
-from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime
 
 class ContactBase(BaseModel):
     name: str
-    designation: Optional[str] = None
+    designation: Optional[str] = "Creative Director / Owner"
     email: Optional[str] = None
     email_status: Optional[str] = "UNVERIFIED"
     phone: Optional[str] = None
@@ -14,7 +14,7 @@ class ContactBase(BaseModel):
     is_primary: Optional[bool] = False
 
 class ContactCreate(ContactBase):
-    company_id: int
+    pass
 
 class ContactResponse(ContactBase):
     id: int
@@ -29,6 +29,7 @@ class CallLogBase(BaseModel):
     contact_id: Optional[int] = None
     caller_name: Optional[str] = "Sales Agent"
     call_status: str
+    call_duration: Optional[int] = 0
     notes: Optional[str] = None
     next_followup_date: Optional[str] = None
 
@@ -54,6 +55,8 @@ class CompanyBase(BaseModel):
     rating: Optional[float] = None
     reviews_count: Optional[int] = 0
     lead_score: Optional[int] = 50
+    tech_stack: Optional[str] = None
+    tags: Optional[str] = None
     google_maps_url: Optional[str] = None
     lead_source: Optional[str] = "Google Maps"
     lead_status: Optional[str] = "New"
@@ -69,6 +72,7 @@ class CompanyUpdate(BaseModel):
     industry: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    tags: Optional[str] = None
     notes: Optional[str] = None
 
 class CompanyResponse(CompanyBase):
@@ -108,3 +112,39 @@ class BatchDeleteRequest(BaseModel):
 
 class BulkEmailVerifyRequest(BaseModel):
     emails: List[str]
+
+class EmailPermutationRequest(BaseModel):
+    first_name: str
+    last_name: str
+    domain: str
+
+class EmailPermutationResult(BaseModel):
+    email: str
+    pattern: str
+    status: str
+    has_mx: bool
+
+class CsvLeadRow(BaseModel):
+    name: str
+    website: Optional[str] = None
+    industry: Optional[str] = "Photography Studio"
+    city: Optional[str] = None
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+
+class CsvImportRequest(BaseModel):
+    leads: List[CsvLeadRow]
+
+class ActivityLogResponse(BaseModel):
+    id: int
+    action: str
+    description: str
+    entity_type: str
+    entity_id: Optional[int] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

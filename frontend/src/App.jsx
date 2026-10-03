@@ -5,7 +5,7 @@ import {
   Search, Filter, Plus, Phone, Mail, Globe, MapPin,
   ExternalLink, MessageSquare, Download, Trash2, RefreshCw,
   Sparkles, ShieldCheck, Layers, Send, BarChart2,
-  ChevronDown, CheckSquare, Square, MoreHorizontal, ArrowUpDown
+  ChevronDown, CheckSquare, Square, MoreHorizontal, ArrowUpDown, Upload
 } from 'lucide-react';
 
 import SlideoutDrawer from './components/SlideoutDrawer';
@@ -15,6 +15,7 @@ import OutreachAssistant from './components/OutreachAssistant';
 import DnsVerifierView from './components/DnsVerifierView';
 import AnalyticsView from './components/AnalyticsView';
 import LeadFinderView from './components/LeadFinderView';
+import CsvImportModal from './components/CsvImportModal';
 
 const API_BASE = '/api';
 
@@ -43,6 +44,7 @@ export default function App() {
   // Modals & Drawers
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [callModalCompany, setCallModalCompany] = useState(null);
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   // Batch verify loading
   const [batchVerifying, setBatchVerifying] = useState(false);
@@ -341,6 +343,14 @@ export default function App() {
                     <Download className="w-3.5 h-3.5" />
                     <span>Export CSV</span>
                   </button>
+
+                  <button
+                    onClick={() => setShowCsvImport(true)}
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-colors flex items-center space-x-1.5 shadow-2xs"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Import CSV</span>
+                  </button>
                 </div>
               </div>
 
@@ -617,6 +627,16 @@ export default function App() {
           company={callModalCompany}
           apiBase={API_BASE}
           onClose={() => setCallModalCompany(null)}
+          onSuccess={handleRefreshAll}
+          setBanner={setBanner}
+        />
+      )}
+
+      {/* Bulk CSV Import Modal */}
+      {showCsvImport && (
+        <CsvImportModal
+          apiBase={API_BASE}
+          onClose={() => setShowCsvImport(false)}
           onSuccess={handleRefreshAll}
           setBanner={setBanner}
         />
