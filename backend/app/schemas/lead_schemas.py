@@ -98,3 +98,13 @@ class VerifyEmailResponse(BaseModel):
     is_disposable: bool
     status: str  # VERIFIED, CATCH_ALL, INVALID
     message: str
+
+class BatchStageUpdateRequest(BaseModel):
+    company_ids: List[int]
+    lead_status: str
+
+class BatchDeleteRequest(BaseModel):
+    company_ids: List[int]
+
+class BulkEmailVerifyRequest(BaseModel):
+    emails: List[str]

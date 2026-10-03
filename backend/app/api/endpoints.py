@@ -7,7 +7,8 @@ from app.schemas.lead_schemas import (
     CompanyResponse, CompanyCreate, CompanyUpdate,
     ContactResponse, ContactCreate,
     CallLogResponse, CallLogCreate,
-    ScrapeRequest, VerifyEmailRequest, VerifyEmailResponse
+    ScrapeRequest, VerifyEmailRequest, VerifyEmailResponse,
+    BatchStageUpdateRequest, BatchDeleteRequest, BulkEmailVerifyRequest
 )
 from app.scrapers.lead_scraper import search_and_generate_leads
 from app.verifiers.lead_verifier import verify_email_address
@@ -263,6 +264,77 @@ def get_outreach_templates():
             "body": "Hi {contact_name},\n\nAre you currently looking for ways to cut down your post-production costs without sacrificing pixel perfection?\n\nAt Picasa & Stencil, we process over 5,000+ e-commerce images daily with strict 100% pure white background, drop shadow, and color matching compliance.\n\nWould you be open to a 2-minute chat or a free trial batch?"
         }
     ]
+
+@router.post("/companies/batch-update-stage")
+def batch_update_stage(payload: BatchStageUpdateRequest, db: Session = Depends(get_db)):
+    updated_count = db.query(Company).filter(Company.id.in_(payload.company_ids)).update(
+        {Company.lead_status: payload.lead_status}, synchronize_session=False
+    )
+    db.commit()
+    return {"message": f"Updated stage to {payload.lead_status}", "updated_count": updated_count}
+
+@router.post("/companies/batch-delete")
+def batch_delete_companies(payload: BatchDeleteRequest, db: Session = Depends(get_db)):
+    db.query(CallLog).filter(CallLog.company_id.in_(payload.company_ids)).delete(synchronize_session=False)
+    db.query(Contact).filter(Contact.company_id.in_(payload.company_ids)).delete(synchronize_session=False)
+    deleted_count = db.query(Company).filter(Company.id.in_(payload.company_ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"message": "Deleted companies successfully", "deleted_count": deleted_count}
+
+@router.post("/verify/bulk-emails")
+def bulk_verify_emails(payload: BulkEmailVerifyRequest):
+    results = []
+    for email in payload.emails:
+        cleaned = email.strip()
+        if cleaned:
+            res = verify_email_address(cleaned)
+            results.append(res)
+    return results
+
+@router.get("/analytics")
+def get_analytics(db: Session = Depends(get_db)):
+    total = db.query(Company).count()
+    if total == 0:
+        return {
+            "total_leads": 0,
+            "avg_score": 0,
+            "verified_percentage": 0,
+            "by_country": {},
+            "by_stage": {},
+            "by_score_tier": {"high": 0, "medium": 0, "low": 0}
+        }
+    
+    stages = {
+        st: db.query(Company).filter(Company.lead_status == st).count()
+        for st in ["New", "Verified", "Contacted", "Sample Sent", "Converted", "Lost"]
+    }
+    
+    # Countries breakdown
+    companies = db.query(Company).all()
+    by_country = {}
+    for c in companies:
+        ctry = c.country or "Other"
+        by_country[ctry] = by_country.get(ctry, 0) + 1
+        
+    verified_contacts = db.query(Contact).filter(Contact.email_status == "VERIFIED").count()
+    total_contacts = db.query(Contact).count()
+    verified_pct = round((verified_contacts / total_contacts * 100), 1) if total_contacts > 0 else 0
+    
+    scores = [c.lead_score or 50 for c in companies]
+    avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+    
+    tier_high = sum(1 for s in scores if s >= 80)
+    tier_med = sum(1 for s in scores if 50 <= s < 80)
+    tier_low = sum(1 for s in scores if s < 50)
+    
+    return {
+        "total_leads": total,
+        "avg_score": avg_score,
+        "verified_percentage": verified_pct,
+        "by_country": by_country,
+        "by_stage": stages,
+        "by_score_tier": {"high": tier_high, "medium": tier_med, "low": tier_low}
+    }
 
 @router.delete("/cleanup-demo-data")
 def cleanup_all_demo_data(db: Session = Depends(get_db)):
