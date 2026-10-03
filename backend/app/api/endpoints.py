@@ -208,6 +208,10 @@ def log_call(company_id: int, call_data: CallLogCreate, db: Session = Depends(ge
     db.refresh(log)
     return log
 
+@router.post("/calls", response_model=CallLogResponse)
+def log_call_direct(call_data: CallLogCreate, db: Session = Depends(get_db)):
+    return log_call(call_data.company_id, call_data, db)
+
 @router.post("/verify/email", response_model=VerifyEmailResponse)
 def verify_email(req: VerifyEmailRequest):
     return verify_email_address(req.email)
