@@ -52,7 +52,9 @@ export default function App() {
   const fetchStats = async () => {
     try {
       const res = await axios.get(`${API_BASE}/stats`);
-      setStats(res.data);
+      if (res.data && typeof res.data === 'object' && !Array.isArray(res.data)) {
+        setStats(res.data);
+      }
     } catch (err) {
       console.error('Error fetching stats:', err);
     }
@@ -62,9 +64,14 @@ export default function App() {
     setLoading(true);
     try {
       const res = await axios.get(`${API_BASE}/companies`);
-      setCompanies(res.data);
+      if (Array.isArray(res.data)) {
+        setCompanies(res.data);
+      } else {
+        setCompanies([]);
+      }
     } catch (err) {
       console.error('Error fetching companies:', err);
+      setCompanies([]);
     } finally {
       setLoading(false);
     }
@@ -182,9 +189,10 @@ export default function App() {
 
   // Filtered Leads
   const filteredCompanies = companies.filter((c) => {
-    const q = searchTerm.toLowerCase();
+    if (!c) return false;
+    const q = (searchTerm || '').toLowerCase();
     const matchesSearch =
-      c.name.toLowerCase().includes(q) ||
+      (c.name || '').toLowerCase().includes(q) ||
       (c.city && c.city.toLowerCase().includes(q)) ||
       (c.country && c.country.toLowerCase().includes(q)) ||
       (c.industry && c.industry.toLowerCase().includes(q)) ||
