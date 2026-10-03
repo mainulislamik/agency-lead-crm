@@ -278,15 +278,15 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                PE
+              <div className="w-10 h-10 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm shadow-sm tracking-wider">
+                CRM
               </div>
               <div>
                 <h1 className="text-lg font-bold text-slate-900 leading-tight">
-                  Picasa & Stencil B2B Lead Engine
+                  CRM
                 </h1>
                 <p className="text-xs text-slate-600 font-medium">
-                  Automated Image Editing & Photography Lead Finder & CRM
+                  B2B Lead Engine & Cold Outreach Pipeline
                 </p>
               </div>
             </div>
