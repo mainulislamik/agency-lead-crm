@@ -6,7 +6,11 @@ from typing import Dict, List, Optional, Any, Set
 import httpx
 from bs4 import BeautifulSoup
 import phonenumbers
-from app.verifiers.lead_verifier import verify_email_address
+from app.verifiers.lead_verifier import (
+    verify_email_address,
+    verify_email_smtp,
+    format_and_validate_phone
+)
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 HTTP_HEADERS = {
@@ -409,6 +413,144 @@ def parse_on_page_team(soup: BeautifulSoup) -> List[Dict[str, str]]:
                         break
     return members
 
+
+DECISION_MAKER_TIERS = {
+    "TIER_1": {
+        "label": "Tier 1 • Owner & C-Level",
+        "rank": 1,
+        "keywords": ["owner", "co-owner", "founder", "co-founder", "ceo", "president", "partner", "principal", "managing director", "executive director", "chief executive"]
+    },
+    "TIER_2": {
+        "label": "Tier 2 • Creative & Art Director",
+        "rank": 2,
+        "keywords": ["creative director", "art director", "head of creative", "studio director", "photo director", "visual director", "vp creative", "executive creative director"]
+    },
+    "TIER_3": {
+        "label": "Tier 3 • Studio & Retouch Lead",
+        "rank": 3,
+        "keywords": ["studio manager", "head of retouching", "lead retoucher", "senior retoucher", "retouch manager", "post-production lead", "post production producer", "digital tech", "photo producer", "production manager", "operations manager"]
+    },
+    "TIER_4": {
+        "label": "Tier 4 • Photographer & Marketing",
+        "rank": 4,
+        "keywords": ["lead photographer", "senior photographer", "commercial photographer", "fashion photographer", "e-commerce visual lead", "marketing director", "brand director", "visual merchandising"]
+    }
+}
+
+def classify_seniority(designation: str):
+    desig_lower = designation.lower()
+    for tier_key in ["TIER_1", "TIER_2", "TIER_3", "TIER_4"]:
+        tier_data = DECISION_MAKER_TIERS[tier_key]
+        for kw in tier_data["keywords"]:
+            if kw in desig_lower:
+                return tier_key, tier_data["label"], tier_data["rank"]
+    return "TIER_2", DECISION_MAKER_TIERS["TIER_2"]["label"], 2
+
+def detect_company_email_pattern(emails: List[str], domain: str) -> Optional[str]:
+    """Hunter.io style pattern deduction from scraped domain emails"""
+    if not emails or not domain:
+        return None
+    patterns = []
+    clean_domain = domain.lower().replace("www.", "")
+    generic_prefixes = {"info", "contact", "support", "sales", "help", "hello", "team", "jobs", "press", "studio", "admin", "office", "billing", "general", "inquiries"}
+    
+    for em in emails:
+        if "@" not in em:
+            continue
+        user, dom = em.lower().split("@", 1)
+        if clean_domain not in dom or user in generic_prefixes:
+            continue
+        if "." in user:
+            parts = user.split(".")
+            if len(parts) == 2:
+                if len(parts[0]) == 1:
+                    patterns.append("flast")
+                elif len(parts[1]) == 1:
+                    patterns.append("firstl")
+                else:
+                    patterns.append("first.last")
+        elif "_" in user:
+            patterns.append("first_last")
+        elif "-" in user:
+            patterns.append("first-last")
+        else:
+            if len(user) <= 5:
+                patterns.append("first")
+            else:
+                patterns.append("flast")
+    if not patterns:
+        return None
+    counts = {}
+    for p in patterns:
+        counts[p] = counts.get(p, 0) + 1
+    return max(counts, key=counts.get)
+
+def generate_role_adaptive_pitch(company_name: str, contact_name: str, designation: str, seniority_tier: str, tech_stack: List[str]) -> str:
+    first_name = contact_name.split()[0] if contact_name and "Decision" not in contact_name else "there"
+    c_name = company_name or "your studio"
+
+    ecom_text = ""
+    if any(t in tech_stack for t in ["Shopify", "WooCommerce", "Magento", "BigCommerce"]):
+        ecom_text = "\nFor your high-volume e-commerce catalog, we deliver 100% color-fidelity, precision clipping paths, and web-optimized compression.\n"
+
+    if seniority_tier == "TIER_1":
+        return (
+            f"Subject: Scalable Post-Production Partner for {c_name} (Overnight Delivery & Margin Growth)\n\n"
+            f"Hi {first_name},\n\n"
+            f"I\'ve been following {c_name}\'s commercial work and wanted to reach out directly. "
+            f"As studio owner, keeping post-production overhead under control while maintaining impeccable quality "
+            f"during peak campaign spikes is always a delicate balance.\n\n"
+            f"We operate a 24/7 dedicated image retouching lab specializing in commercial, e-commerce, and editorial post-production. "
+            f"By offloading repetitive clipping paths, ghost mannequin, and high-frequency retouching to our overnight team, "
+            f"studios typically cut their post-production costs by 45-60% while accelerating client turnaround to under 18 hours.{ecom_text}\n"
+            f"Could I edit 3-5 of {c_name}\'s high-res RAW test files completely free this week? You can review our color fidelity and craftsmanship with zero obligation.\n\n"
+            f"Best regards,\n"
+            f"Imon Khan\n"
+            f"Client Success Lead | Global Studio Post-Production"
+        )
+    elif seniority_tier == "TIER_2":
+        return (
+            f"Subject: Dedicated Retouching & Color Match Extension for {c_name}\'s Creative Team\n\n"
+            f"Hi {first_name},\n\n"
+            f"I admire {c_name}\'s creative aesthetic and visual standard. "
+            f"As {designation}, your time is best spent directing visual storytelling and client vision—not "
+            f"spending endless hours wrestling with complex alpha masks, stray hairs, and pixel-level cleanups.\n\n"
+            f"Our dedicated creative retouching unit works as a seamless overnight extension for creative directors: "
+            f"precise skin frequency separation, high-jewelry micro-contrast, fabric texture preservation, and strict Pantone color consistency. "
+            f"We strictly follow your studio guidelines and PSD layer organization.{ecom_text}\n"
+            f"I\'d love to process a sample batch of 3 test images to prove our precision match with your creative standards. "
+            f"Would you be open to sending a couple of RAW files over for a free blind test?\n\n"
+            f"Warm regards,\n"
+            f"Imon Khan\n"
+            f"Senior Art Retoucher | Global Creative Lab"
+        )
+    elif seniority_tier == "TIER_3":
+        return (
+            f"Subject: 12-24h Overnight Overflow Support for {c_name} Retouching Queue\n\n"
+            f"Hi {first_name},\n\n"
+            f"Reaching out to you as {designation} at {c_name}. When commercial shoot volume surges, "
+            f"managing tight client deadlines and internal retoucher bandwidth can create sudden studio bottlenecks.\n\n"
+            f"We provide secure, overnight high-volume processing with a guaranteed 12-to-24 hour turnaround: "
+            f"hand-drawn pen-tool clipping paths, ghost mannequin 3D neck-joints, shadow creation, and background cleanups at enterprise scale. "
+            f"Every single file goes through a multi-tier QA inspection before return.{ecom_text}\n"
+            f"Let\'s eliminate backlogs: send us 5 of your challenging raw files today, and we\'ll deliver finalized PSDs back overnight at zero charge.\n\n"
+            f"Best regards,\n"
+            f"Imon Khan\n"
+            f"Production Coordinator | Studio Operations"
+        )
+    else:
+        return (
+            f"Subject: Quick Post-Production Support for {c_name}\'s Upcoming Shoots\n\n"
+            f"Hi {first_name},\n\n"
+            f"Really impressed with your photographic work and lighting craft at {c_name}. "
+            f"We assist commercial and fashion photographers by taking all tedious batch culling, RAW color balancing, "
+            f"clipping, and precision blemish cleanups off their desk so they can spend more time behind the lens.{ecom_text}\n"
+            f"We always respect your lighting nuance and maintain natural textures without over-smoothing. "
+            f"Happy to edit 3 sample shots from your recent shoot for free to show you how clean our turnarounds are.\n\n"
+            f"Cheers,\n"
+            f"Imon Khan | Photo Lab Team"
+        )
+
 async def search_linkedin_decision_makers(company_name: str, domain: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search for Key Decision Makers on LinkedIn using Brave Search & Bing with fallback"""
     contacts = []
@@ -505,25 +647,33 @@ async def search_linkedin_decision_makers(company_name: str, domain: Optional[st
 
     return contacts
 
-def generate_email_permutations(first_name: str, last_name: str, domain: str) -> List[str]:
-    """Generate high-probability corporate email permutations"""
+def generate_email_permutations_ranked(first_name: str, last_name: str, domain: str, prevailing_pattern: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Generate Hunter.io style prioritized email permutations with confidence scoring"""
     first = re.sub(r"[^a-zA-Z]", "", first_name.lower().strip())
     last = re.sub(r"[^a-zA-Z]", "", last_name.lower().strip())
-    d = domain.lower().strip()
+    d = domain.lower().replace("www.", "").strip()
     
-    perms = []
+    candidates = []
     if first and last:
-        perms.append(f"{first}.{last}@{d}")
-        perms.append(f"{first}@{d}")
-        perms.append(f"{first[0]}{last}@{d}")
-        perms.append(f"{first}_{last}@{d}")
-        perms.append(f"{last}.{first}@{d}")
-        perms.append(f"{first}{last}@{d}")
+        candidates.append({"pattern": "first.last", "email": f"{first}.{last}@{d}", "base_score": 75})
+        candidates.append({"pattern": "first", "email": f"{first}@{d}", "base_score": 70})
+        candidates.append({"pattern": "flast", "email": f"{first[0]}{last}@{d}", "base_score": 65})
+        candidates.append({"pattern": "first_last", "email": f"{first}_{last}@{d}", "base_score": 60})
+        candidates.append({"pattern": "firstl", "email": f"{first}{last[0]}@{d}", "base_score": 55})
+        candidates.append({"pattern": "last.first", "email": f"{last}.{first}@{d}", "base_score": 50})
     elif first:
-        perms.append(f"{first}@{d}")
-        
-    perms.extend([f"studio@{d}", f"production@{d}", f"contact@{d}", f"info@{d}"])
-    return list(dict.fromkeys(perms))
+        candidates.append({"pattern": "first", "email": f"{first}@{d}", "base_score": 70})
+    
+    # Adjust scores based on prevailing company email pattern
+    for item in candidates:
+        if prevailing_pattern and item["pattern"] == prevailing_pattern:
+            item["confidence"] = 90
+        else:
+            item["confidence"] = item["base_score"]
+        item["status"] = "UNVERIFIED"
+
+    candidates.sort(key=lambda x: x["confidence"], reverse=True)
+    return candidates
 
 def calculate_agency_lead_score(
     has_website: bool,
@@ -648,8 +798,9 @@ async def run_deep_research(url: str) -> Dict[str, Any]:
             "is_primary": True
         })
 
-    # Step 4: Email Permutation & DNS MX Verification
+    # Step 4: Email Permutation, Seniority Tiering, SMTP Handshake & Phone Validation
     scraped_emails = list(web_data.get("emails", []))
+    prevailing_pattern = detect_company_email_pattern(scraped_emails, domain) if domain else None
     
     # Check domain MX status once
     domain_has_mx = False
@@ -657,49 +808,102 @@ async def run_deep_research(url: str) -> Dict[str, Any]:
         mx_check = verify_email_address(f"test@{domain}")
         domain_has_mx = mx_check.get("has_mx", False)
 
+    company_default_phone = None
+    if web_data.get("phones"):
+        company_default_phone = web_data["phones"][0]
+    elif gmaps_info.get("phone"):
+        company_default_phone = gmaps_info["phone"]
+
     final_contacts = []
     for idx, c in enumerate(all_raw_contacts):
         name_parts = c["name"].split()
         first_name = name_parts[0] if name_parts else "info"
         last_name = name_parts[-1] if len(name_parts) > 1 else ""
 
-        perms = generate_email_permutations(first_name, last_name, domain) if domain else []
+        # Seniority Tier Classification
+        desig = c.get("designation", "Creative Director / Studio Owner")
+        tier_key, tier_label, tier_rank = classify_seniority(desig)
 
-        assigned_email = None
-        for se in scraped_emails:
-            if first_name.lower() in se.lower():
-                assigned_email = se
-                break
+        # Hunter style Permutations
+        perm_objects = generate_email_permutations_ranked(first_name, last_name, domain, prevailing_pattern) if domain else []
+
+        assigned_email = c.get("email")
+        if not assigned_email:
+            for se in scraped_emails:
+                if first_name.lower() in se.lower():
+                    assigned_email = se
+                    break
         
         if not assigned_email:
-            if perms:
-                assigned_email = perms[0]
+            if perm_objects:
+                assigned_email = perm_objects[0]["email"]
             elif scraped_emails:
                 assigned_email = scraped_emails[0]
 
-        email_status = "VERIFIED" if (domain_has_mx and assigned_email) else "UNVERIFIED"
+        # Live SMTP Handshake Verification for the candidate email
+        email_status = "UNVERIFIED"
+        email_confidence = 50
+        is_catchall = False
 
-        # Determine phone & WhatsApp
-        phone_val = None
-        if web_data.get("phones"):
-            phone_val = web_data["phones"][0]
-        elif gmaps_info.get("phone"):
-            phone_val = gmaps_info["phone"]
+        if assigned_email and domain_has_mx:
+            try:
+                smtp_result = verify_email_smtp(assigned_email, check_catchall=True)
+                email_status = smtp_result.get("status", "MX_VERIFIED")
+                email_confidence = smtp_result.get("confidence", 75)
+                is_catchall = smtp_result.get("is_catchall", False)
+            except Exception as e:
+                print(f"[DeepResearcher] SMTP check fallback: {e}")
+                email_status = "MX_VERIFIED"
+                email_confidence = 75
 
-        whatsapp_clean = re.sub(r"[^\d]", "", phone_val) if phone_val else None
+        # Update permutation list with checked status
+        for po in perm_objects:
+            if po["email"].lower() == (assigned_email or "").lower():
+                po["status"] = email_status
+                po["confidence"] = email_confidence
+
+        # Determine phone & line type (Mobile vs Landline)
+        raw_phone = c.get("phone") or company_default_phone
+        phone_obj = format_and_validate_phone(raw_phone) if raw_phone else {}
+        phone_val = phone_obj.get("formatted") or raw_phone
+        phone_type = phone_obj.get("phone_type", "UNKNOWN")
+        whatsapp_url = phone_obj.get("whatsapp_url")
+        whatsapp_digits = phone_obj.get("whatsapp") or (re.sub(r"[^\d]", "", phone_val) if phone_val else None)
+
+        # Role-Adaptive Personalized Pitch
+        contact_role_pitch = generate_role_adaptive_pitch(
+            company_name=company_name or "Studio",
+            contact_name=c["name"],
+            designation=desig,
+            seniority_tier=tier_key,
+            tech_stack=web_data.get("tech_stack", [])
+        )
 
         final_contacts.append({
             "name": c["name"],
-            "designation": c.get("designation", "Creative Director / Studio Owner"),
+            "designation": desig,
+            "seniority_tier": tier_key,
+            "seniority_label": tier_label,
+            "seniority_rank": tier_rank,
             "email": assigned_email,
             "email_status": email_status,
-            "email_permutations": perms[:5],
+            "email_confidence": email_confidence,
+            "is_catchall": is_catchall,
+            "email_permutations": perm_objects[:6],
             "phone": phone_val,
-            "phone_status": "VALID" if phone_val else "UNVERIFIED",
-            "whatsapp": whatsapp_clean,
+            "phone_type": phone_type,
+            "phone_status": phone_obj.get("status", "VALID" if phone_val else "UNVERIFIED"),
+            "whatsapp": whatsapp_digits,
+            "whatsapp_url": whatsapp_url,
+            "role_pitch": contact_role_pitch,
             "linkedin_url": c.get("linkedin_url"),
-            "is_primary": idx == 0
+            "is_primary": False
         })
+
+    # Sort contacts by Seniority Rank ascending (Tier 1 Owner -> Tier 2 Creative Director -> Tier 3 Studio Manager)
+    final_contacts.sort(key=lambda x: (x.get("seniority_rank", 99), -x.get("email_confidence", 0)))
+    if final_contacts:
+        final_contacts[0]["is_primary"] = True
 
     # Step 5: Consolidate Address & Location
     final_address = gmaps_info.get("address") or web_data.get("address")

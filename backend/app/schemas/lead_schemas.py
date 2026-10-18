@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -150,16 +150,31 @@ class ActivityLogResponse(BaseModel):
         from_attributes = True
 
 # --- Deep Research Schemas ---
+class EmailPermutationDetail(BaseModel):
+    pattern: str
+    email: str
+    status: str = "UNVERIFIED"
+    confidence: int = 50
+
 class DeepContactItem(BaseModel):
     name: str
     designation: Optional[str] = "Creative Director / Owner"
+    seniority_tier: Optional[str] = "TIER_2"
+    seniority_label: Optional[str] = "Tier 2 • Creative & Art Director"
+    seniority_rank: Optional[int] = 2
     email: Optional[str] = None
     email_status: Optional[str] = "UNVERIFIED"
-    email_permutations: Optional[List[str]] = []
+    email_confidence: Optional[int] = 50
+    is_catchall: Optional[bool] = False
+    email_permutations: Optional[List[Any]] = []
     phone: Optional[str] = None
+    phone_type: Optional[str] = "UNKNOWN"
     phone_status: Optional[str] = "UNVERIFIED"
     whatsapp: Optional[str] = None
+    whatsapp_url: Optional[str] = None
+    role_pitch: Optional[str] = None
     linkedin_url: Optional[str] = None
+    bio: Optional[str] = None
     is_primary: Optional[bool] = False
 
 class DeepResearchRequest(BaseModel):
