@@ -148,3 +148,48 @@ class ActivityLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- Deep Research Schemas ---
+class DeepContactItem(BaseModel):
+    name: str
+    designation: Optional[str] = "Creative Director / Owner"
+    email: Optional[str] = None
+    email_status: Optional[str] = "UNVERIFIED"
+    email_permutations: Optional[List[str]] = []
+    phone: Optional[str] = None
+    phone_status: Optional[str] = "UNVERIFIED"
+    whatsapp: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    is_primary: Optional[bool] = False
+
+class DeepResearchRequest(BaseModel):
+    url: str
+    auto_save: Optional[bool] = False
+
+class BulkDeepResearchRequest(BaseModel):
+    urls: List[str]
+    auto_save: Optional[bool] = False
+
+class DeepResearchResponse(BaseModel):
+    input_url: str
+    detected_type: str
+    company_name: str
+    website: Optional[str] = None
+    domain: Optional[str] = None
+    google_maps_url: Optional[str] = None
+    industry: Optional[str] = "Commercial Photography & Retouching Studio"
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    rating: Optional[float] = None
+    reviews_count: Optional[int] = 0
+    phone: Optional[str] = None
+    general_emails: List[str] = []
+    social_links: dict = {}
+    tech_stack: List[str] = []
+    lead_score: int
+    outreach_pitch: Optional[str] = None
+    contacts: List[DeepContactItem] = []
+    saved: bool = False
+    saved_company_id: Optional[int] = None
+

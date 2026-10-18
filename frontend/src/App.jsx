@@ -5,7 +5,7 @@ import {
   Search, Filter, Plus, Phone, Mail, Globe, MapPin,
   ExternalLink, MessageSquare, Download, Trash2, RefreshCw,
   Sparkles, ShieldCheck, Layers, Send, BarChart2,
-  ChevronDown, CheckSquare, Square, MoreHorizontal, ArrowUpDown, Upload
+  ChevronDown, CheckSquare, Square, MoreHorizontal, ArrowUpDown, Upload, Compass
 } from 'lucide-react';
 
 import SlideoutDrawer from './components/SlideoutDrawer';
@@ -15,6 +15,7 @@ import OutreachAssistant from './components/OutreachAssistant';
 import DnsVerifierView from './components/DnsVerifierView';
 import AnalyticsView from './components/AnalyticsView';
 import LeadFinderView from './components/LeadFinderView';
+import DeepUrlLeadFinderView from './components/DeepUrlLeadFinderView';
 import CsvImportModal from './components/CsvImportModal';
 
 const API_BASE = '/api';
@@ -243,6 +244,7 @@ export default function App() {
             <nav className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto py-1">
               {[
                 { id: 'directory', label: 'Directory', icon: Building2 },
+                { id: 'deep_url', label: 'URL & Maps Deep Engine', icon: Compass },
                 { id: 'finder', label: 'Auto Finder', icon: Sparkles },
                 { id: 'pipeline', label: 'Pipeline', icon: Layers },
                 { id: 'outreach', label: 'Outreach & Scripts', icon: Send },
@@ -570,6 +572,15 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* TAB 1.5: URL & GOOGLE MAPS DEEP LEAD ENGINE */}
+        {activeTab === 'deep_url' && (
+          <DeepUrlLeadFinderView
+            apiBase={API_BASE}
+            onLeadSaved={handleRefreshAll}
+            setBanner={setBanner}
+          />
         )}
 
         {/* TAB 2: AUTO LEAD FINDER */}

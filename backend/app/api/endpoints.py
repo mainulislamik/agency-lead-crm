@@ -10,9 +10,11 @@ from app.schemas.lead_schemas import (
     ScrapeRequest, VerifyEmailRequest, VerifyEmailResponse,
     BatchStageUpdateRequest, BatchDeleteRequest, BulkEmailVerifyRequest,
     EmailPermutationRequest, EmailPermutationResult,
-    CsvImportRequest, ActivityLogResponse
+    CsvImportRequest, ActivityLogResponse,
+    DeepResearchRequest, BulkDeepResearchRequest, DeepResearchResponse, DeepContactItem
 )
 from app.scrapers.lead_scraper import search_and_generate_leads
+from app.scrapers.deep_researcher import run_deep_research
 from app.verifiers.lead_verifier import verify_email_address
 
 router = APIRouter()
@@ -483,3 +485,179 @@ def cleanup_all_demo_data(db: Session = Depends(get_db)):
     db.query(Company).delete()
     db.commit()
     return {"message": "All demo and test data removed successfully. Database is clean."}
+
+# ========================================================
+# --- URL & Google Maps Deep Lead Generation Endpoints ---
+# ========================================================
+
+def _persist_deep_lead(db: Session, data: dict) -> Company:
+    """Helper to upsert Company and Contacts from deep research into PostgreSQL"""
+    domain = data.get("domain")
+    name = data.get("company_name") or "Discovered Studio"
+    
+    # Check if company already exists
+    company = None
+    if domain:
+        company = db.query(Company).filter(Company.domain == domain).first()
+    if not company and name:
+        company = db.query(Company).filter(Company.name.ilike(name)).first()
+
+    notes_parts = []
+    if data.get("tech_stack"):
+        notes_parts.append(f"Tech: {', '.join(data['tech_stack'])}")
+    if data.get("social_links"):
+        social_strs = [f"{k.capitalize()}: {v}" for k, v in data["social_links"].items()]
+        notes_parts.append(f"Socials: {' | '.join(social_strs)}")
+    if data.get("outreach_pitch"):
+        notes_parts.append(f"Pitch:\n{data['outreach_pitch']}")
+    notes_combined = "\n\n".join(notes_parts)
+
+    lead_source = "Google Maps Deep Scan" if data.get("detected_type") == "google_maps" else "Website Deep Scan"
+
+    if not company:
+        company = Company(
+            name=name,
+            website=data.get("website"),
+            domain=domain,
+            industry=data.get("industry") or "Commercial Photography & Retouching Studio",
+            lead_status="Verified" if any(c.get("email_status") == "VERIFIED" for c in data.get("contacts", [])) else "New",
+            lead_score=data.get("lead_score", 50),
+            lead_source=lead_source,
+            city=data.get("city"),
+            country=data.get("country"),
+            address=data.get("address"),
+            phone=data.get("phone"),
+            notes=notes_combined
+        )
+        db.add(company)
+        db.commit()
+        db.refresh(company)
+    else:
+        # Update existing
+        if data.get("website"): company.website = data["website"]
+        if data.get("phone") and not company.phone: company.phone = data["phone"]
+        if data.get("address") and not company.address: company.address = data["address"]
+        if data.get("city") and not company.city: company.city = data["city"]
+        if data.get("country") and not company.country: company.country = data["country"]
+        if data.get("lead_score", 0) > company.lead_score: company.lead_score = data["lead_score"]
+        if notes_combined:
+            company.notes = (company.notes or "") + "\n\n" + notes_combined
+        db.commit()
+        db.refresh(company)
+
+    # Persist contacts
+    for c_item in data.get("contacts", []):
+        c_name = c_item.get("name")
+        c_email = c_item.get("email")
+        
+        # Check duplicate contact
+        existing_contact = None
+        if c_email:
+            existing_contact = db.query(Contact).filter(Contact.company_id == company.id, Contact.email == c_email).first()
+        if not existing_contact and c_name:
+            existing_contact = db.query(Contact).filter(Contact.company_id == company.id, Contact.name == c_name).first()
+
+        if not existing_contact and c_name:
+            new_contact = Contact(
+                company_id=company.id,
+                name=c_name,
+                designation=c_item.get("designation") or "Creative Director / Owner",
+                email=c_email,
+                email_status=c_item.get("email_status", "UNVERIFIED"),
+                phone=c_item.get("phone"),
+                phone_status=c_item.get("phone_status", "UNVERIFIED"),
+                whatsapp=c_item.get("whatsapp"),
+                linkedin_url=c_item.get("linkedin_url"),
+                is_primary=bool(c_item.get("is_primary", False))
+            )
+            db.add(new_contact)
+        elif existing_contact:
+            if c_item.get("linkedin_url") and not existing_contact.linkedin_url:
+                existing_contact.linkedin_url = c_item["linkedin_url"]
+            if c_email and not existing_contact.email:
+                existing_contact.email = c_email
+                existing_contact.email_status = c_item.get("email_status", "UNVERIFIED")
+
+    db.commit()
+
+    # Log activity
+    log = ActivityLog(
+        action="DEEP_LEAD_EXTRACTED",
+        description=f"Deep research completed for {company.name} ({lead_source}). Discovered {len(data.get('contacts', []))} contacts.",
+        entity_type="Company",
+        entity_id=company.id
+    )
+    db.add(log)
+    db.commit()
+
+    return company
+
+@router.post("/leads/deep-research", response_model=DeepResearchResponse)
+async def deep_research_lead_endpoint(request: DeepResearchRequest, db: Session = Depends(get_db)):
+    """
+    Accepts single Website URL or Google Maps URL.
+    Extracts company info, location, key people/designations, emails, phones, social links,
+    and returns rich payload with optional auto-save to CRM.
+    """
+    if not request.url or not request.url.strip():
+        raise HTTPException(status_code=400, detail="Target Website or Google Maps URL is required")
+
+    try:
+        result = await run_deep_research(request.url.strip())
+        
+        if request.auto_save:
+            company = _persist_deep_lead(db, result)
+            result["saved"] = True
+            result["saved_company_id"] = company.id
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Deep research error: {str(e)}")
+
+@router.post("/leads/deep-research/save")
+def save_deep_researched_lead(data: dict, db: Session = Depends(get_db)):
+    """Save/commit a previously researched lead into CRM database"""
+    try:
+        company = _persist_deep_lead(db, data)
+        return {
+            "status": "success",
+            "message": f"Successfully saved {company.name} and contacts into CRM",
+            "company_id": company.id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save lead: {str(e)}")
+
+@router.post("/leads/deep-research/bulk")
+async def bulk_deep_research_leads(request: BulkDeepResearchRequest, db: Session = Depends(get_db)):
+    """
+    Accepts multiple Website or Google Maps URLs, processes them,
+    and optionally auto-saves to database.
+    """
+    if not request.urls:
+        raise HTTPException(status_code=400, detail="List of URLs cannot be empty")
+
+    results = []
+    # Process up to 20 URLs safely
+    for url in request.urls[:20]:
+        clean_url = url.strip()
+        if not clean_url:
+            continue
+        try:
+            res = await run_deep_research(clean_url)
+            if request.auto_save:
+                comp = _persist_deep_lead(db, res)
+                res["saved"] = True
+                res["saved_company_id"] = comp.id
+            results.append(res)
+        except Exception as e:
+            results.append({
+                "input_url": clean_url,
+                "error": str(e),
+                "company_name": "Error extracting URL",
+                "lead_score": 0,
+                "contacts": [],
+                "saved": False
+            })
+
+    return {"total": len(results), "leads": results}
+
